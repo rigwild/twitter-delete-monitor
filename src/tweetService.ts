@@ -4,6 +4,7 @@ import fetch from 'node-fetch'
 import { CronJob } from 'cron'
 import fs from 'fs'
 import ms from 'ms'
+const btoa = require('btoa')
 
 import { TWEETING_SERVICE_CRON_TIME, APP_CONSUMER_KEY, APP_CONSUMER_SECRET, USER_ACCESS_TOKEN, USER_ACCESS_TOKEN_SECRET } from './config'
 import { TweetModel } from './db'
@@ -42,8 +43,9 @@ const generateTweetAndSave = async (dbTweetDataRaw: any): Promise<string> => {
     } : undefined
   }
 
-  // Create the uri (encodeURI is important as stringified JSON can contain invalid query characters)
-  const uri = encodeURI(`https://tweet-generator.now.sh/screenshot?style=no-stats&tweetData=${JSON.stringify(tweet).replace('#', encodeURIComponent('#'))}`)
+  // Create the uri
+  const uri = `https://tweet-generator.now.sh/screenshot?style=no-stats&tweetData=${btoa(encodeURIComponent(JSON.stringify(tweet)))}`
+  console.log(uri)
   const { body } = await fetch(uri)
     .then(async res => {
       // The endpoint returned errors, throw
