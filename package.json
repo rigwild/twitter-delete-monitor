@@ -17,6 +17,7 @@
     "mongoose": "^5.6.9",
     "ms": "^2.1.2",
     "node-fetch": "^2.6.0",
+    "puppeteer": "^1.19.0",
     "twit": "^2.2.11"
   },
   "devDependencies": {
@@ -25,6 +26,7 @@
     "@types/mongoose": "^5.5.12",
     "@types/node": "^12.7.1",
     "@types/node-fetch": "^2.5.0",
+    "@types/puppeteer": "^1.19.1",
     "@types/twit": "^2.2.22",
     "typescript": "^3.5.3"
   }

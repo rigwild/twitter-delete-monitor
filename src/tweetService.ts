@@ -1,11 +1,12 @@
 import Twit from 'twit'
 import path from 'path'
+import puppeteer from 'puppeteer'
 import fetch from 'node-fetch'
 import { CronJob } from 'cron'
 import fs from 'fs'
 import ms from 'ms'
 
-import { TWEETING_SERVICE_CRON_TIME, APP_CONSUMER_KEY, APP_CONSUMER_SECRET, USER_ACCESS_TOKEN, USER_ACCESS_TOKEN_SECRET } from './config'
+import { TWEETING_SERVICE_CRON_TIME, APP_CONSUMER_KEY, APP_CONSUMER_SECRET, USER_ACCESS_TOKEN, USER_ACCESS_TOKEN_SECRET, MANUAL_LOGIN_TWITTER_USERNAME, MANUAL_LOGIN_TWITTER_PASSWORD } from './config'
 import { TweetModel } from './db'
 
 // Create the bot instance
@@ -61,28 +62,6 @@ const generateTweetAndSave = async (dbTweetDataRaw: any): Promise<string> => {
 }
 
 /**
- * Tweet with an image
- * @param imagePath Path to the image
- * @param message Message to post with the image
- * @returns Added tweet API response
- */
-const tweetMedia = async (imagePath: string, message: string): Promise<{ [key: string]: any }> =>
-  new Promise((resolve, reject) => {
-    const b64content = fs.readFileSync(imagePath, { encoding: 'base64' })
-
-    // Upload the media
-    bot.post('media/upload', { media_data: b64content }, (err, reply: any) => {
-      if (err) return reject(err)
-
-      // Tweet with the media
-      bot.post('statuses/update', { status: message, media_ids: [reply.media_id_string] }, (err, reply) => {
-        if (err) return reject(err)
-        else return resolve(reply)
-      })
-    })
-  })
-
-/**
  * Get a random face emoji
  * @returns An emoji
  */
@@ -90,12 +69,68 @@ const randomEmoji = () => '😀 😁 😂 🤣 😃 😄 😅 😆 😉 😊 �
   .split(' ')
   .find((_, i, ar) => Math.random() <= 1 / (ar.length - i))
 
+const delay = (ms: number) => new Promise(res => setTimeout(res, ms))
+
+const connectChromeTwitter = async (username: string, password: string) => {
+  const browser = await puppeteer.launch({
+    headless: true,
+    defaultViewport: {
+      isMobile: true,
+      isLandscape: false,
+      width: 375,
+      height: 667,
+      deviceScaleFactor: 2
+    },
+    args: ['--no-sandbox']
+  })
+
+  const page = await browser.newPage()
+  await page.setUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 11_0 like Mac OS X) AppleWebKit/604.1.38 (KHTML, like Gecko) Version/11.0 Mobile/15A372 Safari/604.1')
+
+  await page.goto('https://twitter.com/login')
+
+  await delay(2000)
+  await page.click('input[name="session[username_or_email]"]')
+  await page.keyboard.type(username)
+  await page.click('input[name="session[password]"]')
+  await page.keyboard.type(password)
+  await page.keyboard.press('Enter')
+
+  await delay(2000)
+  return page
+}
+
+/**
+ * Tweet with an image
+ * @param imagePath Path to the image
+ * @param message Message to post with the image
+ * @returns Added tweet API response
+ */
+const tweetMedia = async (page: puppeteer.Page, imagePath: string, message: string): Promise<void> => {
+  // Go to tweet page
+  await page.goto('https://mobile.twitter.com/compose/tweet')
+  await delay(2000)
+  // Write the tweet
+  await page.click('textarea')
+  await page.keyboard.type(message)
+  await delay(200)
+  await page.mouse.click(100, 120)
+  const [fileChooser] = await Promise.all([
+    page.waitForFileChooser(),
+    page.click('div[aria-label="Add photos or video"]')
+  ])
+  await fileChooser.accept([imagePath])
+  await page.click('div[data-testid="tweetButton"]')
+  await delay(7500)
+}
 
 /**
  * Starts the tweeting service every 5 minutes
  */
-export default () => {
+export default async () => {
   console.info('The tweeting service was started')
+  const page = await connectChromeTwitter(MANUAL_LOGIN_TWITTER_USERNAME, MANUAL_LOGIN_TWITTER_PASSWORD)
+  console.log('Chrome logged in twitter, idling waiting for tweets to publish')
 
   new CronJob(TWEETING_SERVICE_CRON_TIME, async () => {
     try {
@@ -106,21 +141,22 @@ export default () => {
       if (!notTweetedYet || !notTweetedYet.status || !notTweetedYet.status.deletedDate)
         return console.info('No deleted tweet to post')
 
+      console.info(`${new Date().toJSON()} - Starting to publish the deleted tweet id=${notTweetedYet.tweetId} by @${notTweetedYet.author.handle}`)
       // Generate the tweet
       const generatedMediaPath = await generateTweetAndSave(notTweetedYet)
 
       // Tweet
       const deletedAfter = ms(notTweetedYet.status.deletedDate.getTime() - notTweetedYet.timestamp.getTime())
-      await tweetMedia(generatedMediaPath, `Supprimé par @${notTweetedYet.author.handle} après ${deletedAfter} ${randomEmoji()} #deletedFrenchTweets`)
+      await tweetMedia(page, generatedMediaPath, `Supprimé par @${notTweetedYet.author.handle} après ${deletedAfter} ${randomEmoji()} #deletedFrenchTweets`)
 
       // Set the tweet as published in database
       await TweetModel.findByIdAndUpdate(notTweetedYet._id, {
         'status.deletionPublishedDate': new Date()
       })
-      console.info(`${new Date().toJSON()} - Tweeted deleted tweet id=${notTweetedYet.tweetId} by @${notTweetedYet.author.handle}`)
+      console.info(`${new Date().toJSON()} - Finishing to publish the deleted tweet id=${notTweetedYet.tweetId} by @${notTweetedYet.author.handle}`)
     }
     catch (error) {
       console.error(error)
     }
-  }, undefined, true, 'Europe/Paris', undefined, true)
+  }, undefined, true, 'Europe/Paris', undefined, false)
 }
