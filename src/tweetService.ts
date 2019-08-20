@@ -117,7 +117,7 @@ export default () => {
       await TweetModel.findByIdAndUpdate(notTweetedYet._id, {
         'status.deletionPublishedDate': new Date()
       })
-      console.info(`${new Date().toJSON()} - Tweeted deleted tweet id=${notTweetedYet.tweetId} by @${notTweetedYet.author.handle}`)
+      console.info(`${new Date().toJSON()} - Published deleted tweet id=${notTweetedYet.tweetId} by @${notTweetedYet.author.handle}`)
     }
     catch (error) {
       console.error(error)

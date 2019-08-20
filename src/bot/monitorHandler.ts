@@ -11,10 +11,18 @@ export default async (tweet: any) => {
 
   const tweetData: Tweet = {
     tweetId: tweet.id_str,
-    content: tweet.text,
+    content: !tweet.text
+      ? ' '
+      : tweet.extended_tweet
+        ? tweet.extended_tweet.full_text
+        : tweet.text,
     quoted: tweet.is_quote_status ? {
       tweetId: tweet.quoted_status.id_str,
-      content: tweet.quoted_status.text,
+      content: !tweet.quoted_status.text
+        ? ' '
+        : tweet.quoted_status.extended_tweet
+          ? tweet.quoted_status.extended_tweet.full_text
+          : tweet.quoted_status.text,
       timestamp: new Date(tweet.quoted_status.created_at),
       author: {
         accountId: tweet.quoted_status.user.id_str,
