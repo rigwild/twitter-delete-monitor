@@ -91,6 +91,12 @@ const randomEmoji = () => '😀 😁 😂 🤣 😃 😄 😅 😆 😉 😊 �
   .find((_, i, ar) => Math.random() <= 1 / (ar.length - i))
 
 
+let tweetCount = 0
+let rateLimit = {
+  nextTimeBlock: new Date(Date.now() + 1000 * 60 * 60 * 3),
+  usedLimit: 0
+}
+
 /**
  * Starts the tweeting service every 5 minutes
  */
@@ -99,12 +105,22 @@ export default () => {
 
   new CronJob(TWEETING_SERVICE_CRON_TIME, async () => {
     try {
+      // Check the rate limit status
+      if (new Date() > rateLimit.nextTimeBlock) {
+        // Time block passed, reset the counter
+        rateLimit.nextTimeBlock = new Date(Date.now() + 1000 * 60 * 60 * 3)
+        rateLimit.usedLimit = 0
+      }
+      else if (rateLimit.usedLimit >= 300)
+        return console.info(`${new Date().toJSON()} - Tweet service is paused while rate limit resets`)
+
+      // Find the tweet to publish
       const notTweetedYet = await TweetModel.findOne({
         'status.deletedDate': { $ne: null },
         'status.deletionPublishedDate': null
       })
       if (!notTweetedYet || !notTweetedYet.status || !notTweetedYet.status.deletedDate)
-        return console.info('No deleted tweet to post')
+        return console.info(`${new Date().toJSON()} - No deleted tweet to post`)
 
       // Generate the tweet
       const generatedMediaPath = await generateTweetAndSave(notTweetedYet)
@@ -117,10 +133,14 @@ export default () => {
       await TweetModel.findByIdAndUpdate(notTweetedYet._id, {
         'status.deletionPublishedDate': new Date()
       })
-      console.info(`${new Date().toJSON()} - Published deleted tweet id=${notTweetedYet.tweetId} by @${notTweetedYet.author.handle}`)
+      console.info(`${new Date().toJSON()} - Tweet: ${tweetCount} - Rate limit: ${rateLimit.usedLimit} - Published deleted tweet id=${notTweetedYet.tweetId} by ${notTweetedYet.author.pseudo} (@${notTweetedYet.author.handle} - id=${notTweetedYet.author.accountId})`)
+
+      // Mark one API usage
+      rateLimit.usedLimit++
+      tweetCount++
     }
     catch (error) {
       console.error(error)
     }
-  }, undefined, true, 'Europe/Paris', undefined, true)
+  }, undefined, true, 'Europe/Paris', undefined, false)
 }
