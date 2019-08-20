@@ -73,7 +73,7 @@ const delay = (ms: number) => new Promise(res => setTimeout(res, ms))
 
 const connectChromeTwitter = async (username: string, password: string) => {
   const browser = await puppeteer.launch({
-    headless: true,
+    headless: process.env.NODE_ENV === 'development' ? false : true,
     defaultViewport: {
       isMobile: true,
       isLandscape: false,
@@ -81,7 +81,7 @@ const connectChromeTwitter = async (username: string, password: string) => {
       height: 667,
       deviceScaleFactor: 2
     },
-    args: ['--no-sandbox']
+    args: process.env.NODE_ENV === 'development' ? undefined : ['--no-sandbox']
   })
 
   const page = await browser.newPage()
@@ -115,11 +115,15 @@ const tweetMedia = async (page: puppeteer.Page, imagePath: string, message: stri
   await page.keyboard.type(message)
   await delay(200)
   await page.mouse.click(100, 120)
+  await page.mouse.click(110, 130)
+  await page.mouse.click(120, 140)
+  await delay(200)
   const [fileChooser] = await Promise.all([
     page.waitForFileChooser(),
     page.click('div[aria-label="Add photos or video"]')
   ])
   await fileChooser.accept([imagePath])
+  await delay(200)
   await page.click('div[data-testid="tweetButton"]')
   await delay(7500)
 }
